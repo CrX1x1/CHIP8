@@ -1,0 +1,39 @@
+#bouncing dvd
+
+: main
+    v0 := 32 #middle
+    v1 := 16 #middle too
+    v2 := -1 #x speed(1 right)
+    v3 := 1 #y speed(1 down)
+    
+    i := logo
+    loop
+        #draw the square
+        clear
+        sprite v0 v1 6
+        v0 += v2
+        v1 += v3
+        #wall check
+        if v0 <= 0 then v2 := 1
+        if v0 >= 56 then v2 := -1
+        if v1 <= 0 then v3 := 1
+        if v1 >= 26 then v3 := -1
+        # delay
+        loop
+            vf := delay
+            if vf != 0 then
+        again
+        vf := 3
+        delay := vf
+    again
+            
+
+        
+
+: logo #thanks, octo sprite editor
+    0xD6
+    0xB5 
+    0xCE 
+    0x3C 
+    0xE7 
+    0x3C

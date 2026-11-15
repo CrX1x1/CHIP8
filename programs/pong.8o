@@ -1,0 +1,99 @@
+# pong game i guess
+:alias x v0
+:alias y v1
+:alias dx v2
+:alias dy v3
+:alias p1x v4
+:alias p1y v5 #paddle
+:alias temp v8
+:alias score vE
+
+: main
+    # random ball position limited by screen 
+    x := random 60
+    y := random 30
+
+    dx := 1
+    dy := 1
+    p1x := 62
+    p1y := 16
+
+    i := ball
+    loop #the thing says there's an error here but it's working great
+        clear
+        i := paddle
+        sprite p1x p1y 5
+        i := ball
+        x += dx
+        y += dy
+        sprite x y 2
+        temp := vf
+
+        #paddle collision
+        if temp != 0 begin
+            temp := 0xFF
+            dx ^= temp
+            dx += 1
+            score += 1
+        end
+        temp := 0xFF
+        if y >= 30 begin #fricking compiler doesn't do inline math
+            dy ^= temp
+            dy += 1
+        end
+        if y <= 0 begin
+            dy ^= temp
+            dy += 1
+        end
+        if x <= 1 begin
+            dx ^= temp
+            dx += 1
+        end
+        #keypress
+        va := 2
+        if va key begin
+            if p1y > 0 begin
+                p1y -= 2
+            end
+        end
+        va := 3
+        if va key begin
+            if p1y < 25 begin
+                p1y += 2
+            end
+        end
+        #lose
+        if x >= 63 then jump lose
+        #delay
+        loop
+            vf := delay
+            if vf != 0 then
+        again
+        vf := 3
+        delay := vf
+    again
+
+
+: lose
+    clear
+    # i memory goes to fonts
+    i := hex score
+    temp := 0
+    sprite temp temp 5
+    
+    vf := 120
+    delay := vf
+
+    score := 0
+    ;
+
+
+: ball
+    0b11000000
+    0b11000000
+: paddle
+    0b10000000
+    0b10000000
+    0b10000000
+    0b10000000
+    0b10000000

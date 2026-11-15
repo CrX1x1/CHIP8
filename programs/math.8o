@@ -1,0 +1,71 @@
+# 16 bit math engine for the thing, idk
+#yeah, no, too hard, i abandoned this
+
+#perhaps i can use v0 for hi and v1 for lo and repeat...
+:alias h1 v0 #hi
+:alias l1 v1 #lo
+:alias h2 v2 #hi
+:alias l2 v3 #lo
+:alias h3 v4 #hi
+:alias l3 v5 #lo
+:alias h4 v6 #hi
+:alias l4 v7 #lo
+:alias h5 v8 #hi
+:alias l5 v9 #lo
+:alias h6 vA #hi
+:alias l6 vB #lo
+:alias tmp vC
+:alias count vD
+:alias t1 vE
+
+: add16
+    l1 += l2
+    #save the carry flag
+    t1 := vf
+    h1 += h2
+    h1 += t1
+    ;
+: sub16
+    l1 -= l2
+    #save the borrow flag
+    t1 := vf
+    h1 -= h2
+    h1 -= t1
+    ;
+: mul16
+    h1 := 0
+    l1 := 0
+
+    h4 := h3
+    l4 := l3
+
+    count := 16
+: mul_loop #ai made, took too long
+    h2 >>= 1
+    t1 := vf
+
+    l2 >>= 1
+
+    if t1 != 0 begin
+        tmp := 0x80
+        l2 += tmp
+    end
+
+    if vf != 0 begin
+        l1 += l4
+        t1 := vf
+        h1 += h4
+        h1 += t1
+    end
+    l4 += l4
+    t1 := vf
+    h4 += h4
+    h4 += t1
+
+    tmp := 1
+    count -= tmp
+
+    if count != 0 begin
+        jump mul_loop
+    end
+    ;

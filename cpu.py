@@ -6,29 +6,32 @@ from CORE import * #intentional
 
 #test program
 ROM = bytes([
-    # Wait for a key → store in V0
-    0xF0, 0x0A,          # Fx0A  LD V0, K
-
-    # Clear screen
-    0x00, 0xE0,          # CLS
-
-    # Point I at the font for the key that was pressed
-    0xF0, 0x29,          # Fx29  LD F, V0
-
-    # Draw it at (10, 10)
-    0x60, 0x0A,          # LD V0, 10
-    0x61, 0x0A,          # LD V1, 10
-    0xD0, 0x15,          # DRW V0, V1, 5
-
-    # Loop forever
-    0x12, 0x00           # JP 0x200  (jump back to the wait)
+    0x60, 0x20, 0x61, 0x10, 0x62, 0xFF, 0x63, 0x01,
+    0xA2, 0x3E, 0x00, 0xE0, 0xD0, 0x16, 0x80, 0x24,
+    0x81, 0x34, 0x6F, 0x00, 0x8F, 0x05, 0x3F, 0x00,
+    0x62, 0x01, 0x6F, 0x38, 0x8F, 0x07, 0x3F, 0x00,
+    0x62, 0xFF, 0x6F, 0x00, 0x8F, 0x15, 0x3F, 0x00,
+    0x63, 0x01, 0x6F, 0x1A, 0x8F, 0x17, 0x3F, 0x00,
+    0x63, 0xFF, 0xFF, 0x07, 0x3F, 0x00, 0x12, 0x32,
+    0x6F, 0x03, 0xFF, 0x15, 0x12, 0x0A, 0xD6, 0xB5,
+    0xCE, 0x3C, 0xE7, 0x3C
+])
+'''
+bytes([
+    0xF0, 0x0A,          # F00A: Wait for key press, store key value in V0
+    0x00, 0xE0,          # 00E0: Clear display buffer
+    0xF0, 0x29,          # F029: Set I to memory address of the sprite for character in V0
+    0x60, 0x0A,          # 600A: V0 = 10 (X coordinate)
+    0x61, 0x0A,          # 610A: V1 = 10 (Y coordinate)
+    0xD0, 0x15,          # D015: Draw 5-byte tall sprite at (V0, V1)
+    0x12, 0x00           # 1200: Jump back to 0x200 to repeat the loop
 ])# AI made this, probably common info though
-
+'''
 #configs
 SCALE = 4 #4x4 per pixel, calculator is 320x240
 FPS = 60
 INSTRS_PER_FRAME = 12
-STICKY_KEY = 1 #in instruction cycles
+STICKY_KEY = 8*INSTRS_PER_FRAME #in instruction cycles
 
 #states and registers
 memory = bytearray(4096)
@@ -42,6 +45,7 @@ timer = 0 # for keys
 prev_key = None
 
 display = bytearray(64 * 32) #binary
+prev_display = bytearray(64 * 32)
 draw_flag = False
 
 FONT = [ #err, autocomplete finished this, i dunno if it's right, maybe later
@@ -91,13 +95,37 @@ def draw_sprite(x, y, sprite):
     draw_flag = True
     #print("Sprite drawn at", x, y)
     # done by autocomplete, verify later
-def render():
-    ti_graphics.cls()
+def render(): #will do postprocessing to reduce the amount of blits needed
+    global prev_display
     for y in range(32):
         for x in range(64):
-            if display[y * 64 + x]:
-                ti_graphics.fillRect(x * SCALE, y * SCALE, SCALE, SCALE)
+            idx = y * 64 + x
+            if display[idx] != prev_display[idx]:
+                if display[idx]:
+                    ti_graphics.setColor((0,0,0))
+                else:
+                    ti_graphics.setColor((255,255,255))
+                ti_graphics.fillRect(x * SCALE, y * SCALE+30, SCALE, SCALE)
+                prev_display[idx] = display[idx]
     # no need for pause lol, maybe for debugging
+def reset(): #i forgot to clear stuff
+    global PC, I, STICKY_KEY, delay_timer, sound_timer, timer, prev_key, draw_flag, prev_display
+    PC = 0x200
+    I = 0
+    STICKY_KEY = 0
+    delay_timer = 0
+    sound_timer = 0
+    timer = 0
+    prev_key = None
+    draw_flag = True
+    clear_display()
+    stack.clear()
+    for i in range(len(V)):
+        V[i] = 0
+    for i in range(len(memory)):
+        memory[i] = 0
+    load_font()
+    prev_display = [0] * len(display)
 def get_sticky_key():
     global STICKY_KEY, timer, prev_key
     key = get_keymap()
@@ -112,7 +140,7 @@ def get_sticky_key():
     return key
 # interpreter
 def execute(opcode):
-    global PC, I, STICKY_KEY, delay_timer, sound_timer, timer, prev_key
+    global PC, I, STICKY_KEY, delay_timer, sound_timer, timer, prev_key, draw_flag
 
     op = (opcode & 0xF000) >> 12
     x = (opcode & 0x0F00) >> 8
@@ -168,24 +196,28 @@ def execute(opcode):
     #add Vx Vy
     elif op == 8 and n == 4:
         total = V[x] + V[y]
-        V[0xF] = 1 if total > 0xFF else 0
         V[x] = total & 0xFF
+        V[0xF] = 1 if total > 0xFF else 0
     #sub Vx Vy
     elif op == 8 and n == 5:
-        V[0xF] = 1 if V[x] >= V[y] else 0
+        borrow = 1 if V[x] >= V[y] else 0
         V[x] = (V[x] - V[y]) & 0xFF
+        V[0xF] = borrow
     #shr Vx
     elif op == 8 and n == 6:
-        V[0xF] = V[x] & 1
-        V[x] >>= 1
+        carry = V[x] & 1
+        V[x] = (V[x] >> 1) & 0xFF
+        V[0xF] = carry
     #subn Vx Vy
     elif op == 8 and n == 7:
-        V[0xF] = 1 if V[y] >= V[x] else 0
+        borrow = 1 if V[y] >= V[x] else 0
         V[x] = (V[y] - V[x]) & 0xFF
+        V[0xF] = borrow
     #shl Vx
     elif op == 8 and n == 0xE:
-        V[0xF] = (V[x] & 0x80) >> 7
+        msb = (V[x] & 0x80) >> 7
         V[x] = (V[x] << 1) & 0xFF
+        V[0xF] = msb
     #sne Vx Vy
     elif op == 9 and n == 0:
         if V[x] != V[y]:
@@ -202,6 +234,9 @@ def execute(opcode):
     #draw Vx Vy sprite
     elif op == 0xD:
         draw_sprite(V[x] % 64, V[y] % 32, n)
+        if draw_flag: #why not, worth a try
+            render() #oh, wow, it worked, no more flickering
+            draw_flag = False
     #skip Vx
     elif op == 0xE:
         if kk == 0x9E:
@@ -215,10 +250,12 @@ def execute(opcode):
         if kk == 0x07:
             V[x] = delay_timer
         #ld Vx, K
-        elif kk == 0x0A:
+        elif kk == 0x0A: #please lord give me concurrency
             key = get_keymap(True)
             if key is not None:
                 V[x] = key
+            else:
+                PC -= 2
         #ld delay, Vx
         elif kk == 0x15:
             delay_timer = V[x]
@@ -246,9 +283,8 @@ def execute(opcode):
 
 def run():
     global PC, delay_timer, sound_timer, draw_flag
-
+    reset()
     load_font()
-    load_rom(ROM)
     print("I'm alive")
     last_time = time.ticks_ms()
 
@@ -258,13 +294,11 @@ def run():
             opcode = (memory[PC] << 8) | memory[PC + 1]
             PC = (PC + 2) & 0xFFF
             execute(opcode)
-            
-            if draw_flag:
-                render()
-                draw_flag = False
-            
-
-        #render as soon as changed
+        '''    
+        if draw_flag:
+            render()
+            draw_flag = False
+        '''    
 
         #update timers
         now = time.ticks_ms()
@@ -274,9 +308,5 @@ def run():
             if sound_timer > 0:
                 sound_timer -= 1
             last_time = now
-
-            if draw_flag:
-                render()
-                draw_flag = False
         # don't make the calculator overwork
         time.sleep(0.01)
