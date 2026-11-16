@@ -19,7 +19,7 @@
     p1y := 16
 
     i := ball
-    loop #the thing says there's an error here but it's working great
+    loop #the thingamabob parser says there's an error here but it's working great
         clear
         i := paddle
         sprite p1x p1y 5
